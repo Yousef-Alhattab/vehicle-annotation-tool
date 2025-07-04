@@ -376,6 +376,27 @@
     </style>
 </head>
 <body>
+    <script>
+        // Password protection - Change the password below
+        const correctPassword = "VehicleAnnotation2024";
+        const userPassword = prompt("🔐 Enter password to access the Vehicle Annotation Tool:");
+        
+        if (userPassword !== correctPassword) {
+            document.body.innerHTML = `
+                <div style="display: flex; justify-content: center; align-items: center; height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                    <div style="text-align: center; padding: 40px; background: white; border-radius: 20px; box-shadow: 0 25px 50px rgba(0,0,0,0.3);">
+                        <h1 style="color: #dc3545; margin-bottom: 20px;">🚫 Access Denied</h1>
+                        <p style="color: #666; margin-bottom: 30px;">Incorrect password. Please contact the administrator for access.</p>
+                        <button onclick="location.reload()" style="padding: 12px 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">🔄 Try Again</button>
+                    </div>
+                </div>
+            `;
+            throw new Error("Access denied");
+        }
+    </script>
+
+    <!-- Your existing div starts here -->
+    <div id="root"></div>    
     <div id="root"></div>
     
     <script type="text/babel">
