@@ -485,8 +485,7 @@
                 license_plate_format: 'standard',
                 license_plate_blurred: false,
                 license_plate_visible: true,
-                chainOfThought: ''
-
+                chainOfThought: []               
             });
             
             
@@ -666,11 +665,57 @@
                 loadImageAtIndex(imageDirectory, newIndex);
             };
 
+            // Helper function to show temporary messages under the image
+            const showTemporaryMessage = (message) => {
+                // Create or update message element
+                let messageEl = document.getElementById('temp-save-message');
+                if (!messageEl) {
+                    messageEl = document.createElement('div');
+                    messageEl.id = 'temp-save-message';
+                    messageEl.style.cssText = `
+                        position: fixed;
+                        bottom: 20px;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        background: rgba(0,0,0,0.9);
+                        color: white;
+                        padding: 12px 20px;
+                        border-radius: 8px;
+                        font-weight: bold;
+                        z-index: 10000;
+                        text-align: center;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                        max-width: 80%;
+                        white-space: pre-line;
+                    `;
+                    document.body.appendChild(messageEl);
+                }
+                
+                messageEl.textContent = message;
+                messageEl.style.display = 'block';
+                
+                // Hide after 3 seconds
+                setTimeout(() => {
+                    if (messageEl) {
+                        messageEl.style.display = 'none';
+                    }
+                }, 3000);
+            };
+
+
             const updateBboxPosition = (id, newBbox) => {
                 setAnnotations(prev => ({
                     ...prev,
                     objects: prev.objects.map(obj => 
-                        obj.id === id ? { ...obj, bbox: newBbox } : obj
+                        obj.id === id ? { 
+                            ...obj, 
+                            bbox: [
+                                Math.round(newBbox.x),
+                                Math.round(newBbox.y),
+                                Math.round(newBbox.x + newBbox.width),
+                                Math.round(newBbox.y + newBbox.height)
+                            ]
+                        } : obj
                     )
                 }));
             };
@@ -707,13 +752,21 @@
                 const deltaX = currentMouse.x - startMouse.x;
                 const deltaY = currentMouse.y - startMouse.y;
                 
-                let newBbox = { ...originalBbox };
+                // Convert array format [x1,y1,x2,y2] to object format {x,y,width,height} for calculations
+                const bbox = {
+                    x: originalBbox[0],
+                    y: originalBbox[1], 
+                    width: originalBbox[2] - originalBbox[0],
+                    height: originalBbox[3] - originalBbox[1]
+                };
+                
+                let newBbox = { ...bbox };
                 
                 if (!handle) {
-                    // Moving the entire box - much simpler calculation
-                    newBbox.x = Math.max(0, Math.min(originalBbox.x + deltaX, annotations.image.width - originalBbox.width));
-                    newBbox.y = Math.max(0, Math.min(originalBbox.y + deltaY, annotations.image.height - originalBbox.height));
-                    return newBbox;
+                    // Moving the entire box
+                    newBbox.x = Math.max(0, Math.min(bbox.x + deltaX, annotations.image.width - bbox.width));
+                    newBbox.y = Math.max(0, Math.min(bbox.y + deltaY, annotations.image.height - bbox.height));
+                    return newBbox; // Return as object format for internal use
                 }
                 
                 // Resizing based on handle
@@ -721,38 +774,38 @@
                 
                 switch (handle) {
                     case 'nw':
-                        newBbox.width = Math.max(minSize, originalBbox.width - deltaX);
-                        newBbox.height = Math.max(minSize, originalBbox.height - deltaY);
-                        newBbox.x = originalBbox.x + (originalBbox.width - newBbox.width);
-                        newBbox.y = originalBbox.y + (originalBbox.height - newBbox.height);
+                        newBbox.width = Math.max(minSize, bbox.width - deltaX);
+                        newBbox.height = Math.max(minSize, bbox.height - deltaY);
+                        newBbox.x = bbox.x + (bbox.width - newBbox.width);
+                        newBbox.y = bbox.y + (bbox.height - newBbox.height);
                         break;
                     case 'ne':
-                        newBbox.width = Math.max(minSize, originalBbox.width + deltaX);
-                        newBbox.height = Math.max(minSize, originalBbox.height - deltaY);
-                        newBbox.y = originalBbox.y + (originalBbox.height - newBbox.height);
+                        newBbox.width = Math.max(minSize, bbox.width + deltaX);
+                        newBbox.height = Math.max(minSize, bbox.height - deltaY);
+                        newBbox.y = bbox.y + (bbox.height - newBbox.height);
                         break;
                     case 'sw':
-                        newBbox.width = Math.max(minSize, originalBbox.width - deltaX);
-                        newBbox.height = Math.max(minSize, originalBbox.height + deltaY);
-                        newBbox.x = originalBbox.x + (originalBbox.width - newBbox.width);
+                        newBbox.width = Math.max(minSize, bbox.width - deltaX);
+                        newBbox.height = Math.max(minSize, bbox.height + deltaY);
+                        newBbox.x = bbox.x + (bbox.width - newBbox.width);
                         break;
                     case 'se':
-                        newBbox.width = Math.max(minSize, originalBbox.width + deltaX);
-                        newBbox.height = Math.max(minSize, originalBbox.height + deltaY);
+                        newBbox.width = Math.max(minSize, bbox.width + deltaX);
+                        newBbox.height = Math.max(minSize, bbox.height + deltaY);
                         break;
                     case 'n':
-                        newBbox.height = Math.max(minSize, originalBbox.height - deltaY);
-                        newBbox.y = originalBbox.y + (originalBbox.height - newBbox.height);
+                        newBbox.height = Math.max(minSize, bbox.height - deltaY);
+                        newBbox.y = bbox.y + (bbox.height - newBbox.height);
                         break;
                     case 's':
-                        newBbox.height = Math.max(minSize, originalBbox.height + deltaY);
+                        newBbox.height = Math.max(minSize, bbox.height + deltaY);
                         break;
                     case 'w':
-                        newBbox.width = Math.max(minSize, originalBbox.width - deltaX);
-                        newBbox.x = originalBbox.x + (originalBbox.width - newBbox.width);
+                        newBbox.width = Math.max(minSize, bbox.width - deltaX);
+                        newBbox.x = bbox.x + (bbox.width - newBbox.width);
                         break;
                     case 'e':
-                        newBbox.width = Math.max(minSize, originalBbox.width + deltaX);
+                        newBbox.width = Math.max(minSize, bbox.width + deltaX);
                         break;
                 }
                 
@@ -762,7 +815,7 @@
                 newBbox.width = Math.min(newBbox.width, annotations.image.width - newBbox.x);
                 newBbox.height = Math.min(newBbox.height, annotations.image.height - newBbox.y);
                 
-                return newBbox;
+                return newBbox; // Return as object format for internal use
             };
 
 
@@ -1066,12 +1119,12 @@
                 const baseAnnotation = {
                     id: Date.now() + Math.random(),
                     type: annotationType,
-                    bbox: {
-                        x: Math.round(bbox.x),
-                        y: Math.round(bbox.y),
-                        width: Math.round(bbox.width),
-                        height: Math.round(bbox.height)
-                    }
+                    bbox: [
+                        Math.round(bbox.x),
+                        Math.round(bbox.y),
+                        Math.round(bbox.x + bbox.width),
+                        Math.round(bbox.y + bbox.height)
+                    ]
                 };
                 
                 if (annotationType === 'vehicle') {
@@ -1103,7 +1156,8 @@
                             is_emergency_vehicle: vehicleForm.is_emergency_vehicle,
                             is_electric: vehicleForm.is_electric
                         },
-                        license_plate: vehicleForm.license_plate_text ? {
+                        license_plate: vehicleForm.license_plate_visible ? {
+                            bbox: [0, 0, 0, 0], // Will be updated when license plate annotation is added
                             text: vehicleForm.license_plate_text,
                             country: vehicleForm.license_plate_country,
                             format: vehicleForm.license_plate_format,
@@ -1113,17 +1167,14 @@
                         wheels: [],
                         axles: [],
                         attachments: [],
-                        CoT: vehicleForm.chainOfThought ? [vehicleForm.chainOfThought] : []
-
+                        CoT: Array.isArray(vehicleForm.chainOfThought) ? vehicleForm.chainOfThought.filter(line => line.trim() !== '') : []
                     };
                 }
-                
                 if (annotationType === 'wheel') {
                     return {
                         ...baseAnnotation,
-                        wheel_type: wheelType,
-                        parent_id: null,
-                        attributes: {}
+                        type: wheelType === 'double' ? 'doubleWheel' : 'singleWheel',
+                        parent_id: null
                     };
                 }
 
@@ -1146,36 +1197,35 @@
                     return;
                 }
                 
+                // Only update if it's a vehicle annotation
                 if (selectedObj.type !== 'vehicle') {
-                    alert('Can only update vehicle annotations with form data!');
+                    alert('💡 This button only updates vehicle annotations!\n\nFor other types:\n• Use keyboard shortcuts (1,2,3,4,5)\n• Or use the type dropdown in "Selected Annotation" section');
                     return;
                 }
                 
                 // Save to history before updating
                 saveToHistory(annotations);
                 
+                // Update the vehicle annotation with form data
                 setAnnotations(prev => ({
                     ...prev,
                     objects: prev.objects.map(obj => {
                         if (obj.id === selectedAnnotation) {
-                            // Keep all existing properties and update with form data
                             return {
                                 ...obj,
                                 view_pose: vehicleForm.view_pose,
                                 direction: vehicleForm.direction,
                                 vehicle_info: {
-                                    ...obj.vehicle_info, // Keep existing vehicle_info and merge with new
+                                    ...obj.vehicle_info,
                                     category: vehicleForm.category,
                                     subcategory: vehicleForm.subcategory,
-                                    country: vehicleForm.country,
                                     brand: vehicleForm.brand,
-                                    model: vehicleForm.model,
                                     color: vehicleForm.color,
                                     operator: vehicleForm.operator,
                                     number_of_seats: vehicleForm.number_of_seats
                                 },
                                 mechanical: {
-                                    ...obj.mechanical, // Keep existing mechanical and merge with new
+                                    ...obj.mechanical,
                                     number_of_wheels_visible: vehicleForm.number_of_wheels_visible,
                                     number_of_axles_inferred: vehicleForm.number_of_axles_inferred,
                                     number_of_axles_raised: vehicleForm.number_of_axles_raised,
@@ -1183,7 +1233,7 @@
                                     cargo_present: vehicleForm.cargo_present
                                 },
                                 attributes: {
-                                    ...obj.attributes, // Keep existing attributes and merge with new
+                                    ...obj.attributes,
                                     is_taxi: vehicleForm.is_taxi,
                                     is_bus: vehicleForm.is_bus,
                                     bus_type: vehicleForm.bus_type,
@@ -1196,7 +1246,8 @@
                                     format: vehicleForm.license_plate_format,
                                     blurred: vehicleForm.license_plate_blurred,
                                     visible: vehicleForm.license_plate_visible
-                                } : obj.license_plate // Keep existing license_plate if no text entered
+                                } : obj.license_plate,
+                                CoT: vehicleForm.chainOfThought ? [vehicleForm.chainOfThought] : obj.CoT
                             };
                         }
                         return obj;
@@ -1204,7 +1255,6 @@
                 }));
                 
                 alert('Vehicle annotation updated successfully! 🎉');
-                console.log('Updated annotation:', annotations.objects.find(obj => obj.id === selectedAnnotation));
             };
 
 
@@ -1371,6 +1421,7 @@
                         }
                     }
 
+
                     // Save with 'S' key
                     if (e.key === 's' || e.key === 'S') {
                         e.preventDefault();
@@ -1381,9 +1432,27 @@
                         console.log('📋 annotations count:', annotations.objects.length);
                         
                         if (!selectedDirectory) {
-                            // First press - prompt to select directory
-                            console.log('⚠️ No directory selected, showing prompt');
-                            alert('⚠️ Please select a save directory first using the "📁 Select Save Directory" button!');
+                            // First press - open directory picker directly
+                            console.log('⚠️ No directory selected, showing picker');
+                            if ('showDirectoryPicker' in window) {
+                                window.showDirectoryPicker()
+                                    .then(dirHandle => {
+                                        setSelectedDirectory(dirHandle);
+                                        setSaveDirectoryName(dirHandle.name);
+                                        
+                                        // Show success message under the image
+                                        showTemporaryMessage(`📁 Save location set to: ${dirHandle.name}\nPress 'S' again to save!`);
+                                        console.log('✅ Directory selected:', dirHandle.name);
+                                    })
+                                    .catch(error => {
+                                        if (error.name !== 'AbortError') {
+                                            console.error('Error selecting directory:', error);
+                                            showTemporaryMessage('⚠️ Directory picker not supported. Use the Select Save Directory button.');
+                                        }
+                                    });
+                            } else {
+                                showTemporaryMessage('⚠️ Directory picker not supported. Please use the "📁 Select Save Directory" button!');
+                            }
                             return;
                         }
                         
@@ -1392,11 +1461,13 @@
                         if (image && annotations.objects.length > 0) {
                             console.log('🚀 Calling saveCurrentImageToChosenLocation...');
                             saveCurrentImageToChosenLocation();
+                            showTemporaryMessage('✅ Image and JSON saved successfully!');
                         } else {
                             console.log('❌ No image or annotations to save');
-                            alert('No image or annotations to save!');
+                            showTemporaryMessage('❌ No image or annotations to save!');
                         }
                     }
+
 
                     // Save all annotated images with 'Ctrl+Shift+S' key
                     if (e.ctrlKey && e.shiftKey && (e.key === 's' || e.key === 'S')) {
@@ -1533,9 +1604,7 @@
             };
 
             const saveAnnotatedImage = () => {
-
                 if (!imageRef.current) return;
-
                 
                 // Create a canvas to draw the image with annotations
                 const canvas = document.createElement('canvas');
@@ -1553,7 +1622,7 @@
                     
                     // Draw all bounding boxes
                     annotations.objects.forEach(obj => {
-                        const bbox = obj.bbox;
+                        const bbox = obj.bbox; // This is [x1, y1, x2, y2] format
                         
                         // Set bbox style based on type
                         const typeColors = {
@@ -1567,22 +1636,38 @@
                         ctx.lineWidth = 4;
                         ctx.fillStyle = typeColors[obj.type] + '20'; // Semi-transparent fill
                         
-                        // Draw bbox rectangle
-                        ctx.fillRect(bbox.x, bbox.y, bbox.width, bbox.height);
-                        ctx.strokeRect(bbox.x, bbox.y, bbox.width, bbox.height);
+                        // Draw bbox rectangle - FIXED: Convert [x1,y1,x2,y2] to x,y,width,height
+                        const x = bbox[0];
+                        const y = bbox[1]; 
+                        const width = bbox[2] - bbox[0];  // x2 - x1
+                        const height = bbox[3] - bbox[1]; // y2 - y1
+
+                        ctx.fillRect(x, y, width, height);
+                        ctx.strokeRect(x, y, width, height);
                         
                         // Draw label
                         ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-                        ctx.font = '16px Arial';
-                        const labelText = `${obj.type.replace('_', ' ').toUpperCase()}${obj.vehicle_info?.category ? ` (${obj.vehicle_info.category})` : ''}`;
+                        ctx.font = 'bold 20px Arial';
+                        
+                        let labelText = obj.type.replace('_', ' ').toUpperCase();
+                        if (obj.type === 'vehicle') {
+                            labelText = `${labelText} (${obj.vehicle_info?.category || 'VEHICLE'})`;
+                        }
+                        if (obj.type === 'wheel' && obj.wheel_type) {
+                            labelText = `WHEEL (${obj.wheel_type.toUpperCase()})`;
+                        }
+                        if (obj.license_plate?.text) {
+                            labelText += ` - ${obj.license_plate.text}`;
+                        }
+                        
                         const textWidth = ctx.measureText(labelText).width;
                         
                         // Label background
-                        ctx.fillRect(bbox.x, bbox.y - 25, textWidth + 10, 25);
-                        
+                        ctx.fillRect(x, y - 30, textWidth + 10, 30);
+
                         // Label text
                         ctx.fillStyle = 'white';
-                        ctx.fillText(labelText, bbox.x + 5, bbox.y - 8);
+                        ctx.fillText(labelText, x + 5, y - 8);
                     });
                     
                     // Convert canvas to blob and download
@@ -1808,9 +1893,9 @@
                     img.onload = async () => {
                         ctx.drawImage(img, 0, 0);
                         
-                        // Draw annotations
+                        // Draw annotations - FIXED VERSION
                         annotations.objects.forEach(obj => {
-                            const bbox = obj.bbox;
+                            const bbox = obj.bbox; // [x1, y1, x2, y2] format
                             const typeColors = {
                                 'vehicle': '#22c55e',
                                 'license_plate': '#3b82f6', 
@@ -1822,12 +1907,18 @@
                             ctx.lineWidth = 4;
                             ctx.fillStyle = typeColors[obj.type] + '20';
                             
-                            ctx.fillRect(bbox.x, bbox.y, bbox.width, bbox.height);
-                            ctx.strokeRect(bbox.x, bbox.y, bbox.width, bbox.height);
+                            // FIXED: Convert [x1,y1,x2,y2] to x,y,width,height
+                            const x = bbox[0];
+                            const y = bbox[1];
+                            const width = bbox[2] - bbox[0];  // x2 - x1  
+                            const height = bbox[3] - bbox[1]; // y2 - y1
+                            
+                            ctx.fillRect(x, y, width, height);
+                            ctx.strokeRect(x, y, width, height);
                             
                             // Draw label
                             ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-                            ctx.font = '16px Arial';
+                            ctx.font = 'bold 16px Arial';
                             
                             let labelText = obj.type.replace('_', ' ').toUpperCase();
                             if (obj.type === 'wheel' && obj.wheel_type) {
@@ -1835,9 +1926,9 @@
                             }
                             
                             const textWidth = ctx.measureText(labelText).width;
-                            ctx.fillRect(bbox.x, bbox.y - 25, textWidth + 10, 25);
+                            ctx.fillRect(x, y - 25, textWidth + 10, 25);
                             ctx.fillStyle = 'white';
-                            ctx.fillText(labelText, bbox.x + 5, bbox.y - 8);
+                            ctx.fillText(labelText, x + 5, y - 8);
                         });
                         
                         canvas.toBlob(async (blob) => {
@@ -1951,29 +2042,34 @@
             return (
                 <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)' }}>
                     {/* Header */}
-                    <div className="gradient-bg" style={{ padding: '24px' }}>
-                        <div style={{ maxWidth: '1600px', margin: '0 auto', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                            <div style={{ 
-                                width: '56px', 
-                                height: '56px', 
-                                background: 'rgba(255,255,255,0.2)', 
-                                borderRadius: '16px', 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                justifyContent: 'center',
-                                fontSize: '28px'
-                            }}>
-                                🚛
-                            </div>
-                            <div>
-                                <h1 style={{ color: 'white', fontSize: '36px', fontWeight: 'bold', margin: 0 }}>
-                                    Advanced Vehicle Dataset Tool
-                                </h1>
-                                <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '16px', margin: '4px 0 0 0' }}>
-                                    Professional AVC & ANPR Dataset Creation Platform
-                                </p>
-                            </div>
+                    <div style={{ 
+                        background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #1e3a8a 100%)', 
+                        padding: '24px' 
+                    }}>
+                    <div style={{ maxWidth: '1600px', margin: '0 auto', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <img 
+                            src="./delloyd.jfif" 
+                            alt="Delloyd Logo" 
+                            style={{
+                                width: '80px',
+                                height: '80px',
+                                objectFit: 'contain'
+                            }}
+                            onError={(e) => {
+                                // Fallback to truck emoji if image fails to load
+                                e.target.outerHTML = '<div style="width: 56px; height: 56px; background: rgba(255,255,255,0.2); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 28px;">🚛</div>';
+                            }}
+                        />
+                        
+                        <div>
+                            <h1 style={{ color: 'white', fontSize: '36px', fontWeight: 'bold', margin: 0 }}>
+                                Advanced Vehicle Dataset Tool
+                            </h1>
+                            <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '16px', margin: '4px 0 0 0' }}>
+                                Professional AVC & ANPR Dataset Creation Platform
+                            </p>
                         </div>
+                    </div>
                     </div>
                     
                     <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '24px', display: 'grid', gridTemplateColumns: '320px 1fr 350px', gap: '24px' }}>
@@ -2066,6 +2162,26 @@
                             <div style={{ marginBottom: '16px' }}>
                                 <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px', color: '#374151' }}>
                                     🧠 Chain of Thought (CoT)
+                                    <button 
+                                        onClick={() => alert(`📝 CoT Examples:\n\n"Volvo prime mover detected pulling a box-type trailer."\n"Main vehicle plate WXD1023 and trailer plate TRL9087 are both visible."\n"Total of 10 wheels seen; one axle appears lifted."\n"Trailer is loaded (cargo flag = true)."\n"No bus, taxi, or emergency markings detected."\n\n💡 Each line will be saved separately in the JSON!`)}
+                                        style={{
+                                            background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '50%',
+                                            width: '20px',
+                                            height: '20px',
+                                            fontSize: '12px',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontWeight: 'bold'
+                                        }}
+                                        title="Click for CoT examples"
+                                    >
+                                        !
+                                    </button>
                                 </div>
                                 <div style={{ 
                                     background: '#f8f9fa', 
@@ -2075,9 +2191,16 @@
                                 }}>
                                     <textarea 
                                         className="input-field"
-                                        placeholder="Write your reasoning, observations, or notes..."
-                                        value={vehicleForm.chainOfThought || ''}
-                                        onChange={(e) => setVehicleForm(prev => ({ ...prev, chainOfThought: e.target.value }))}
+                                        placeholder="Write your reasoning, observations, or notes... (Press Enter for new lines)"
+                                        value={Array.isArray(vehicleForm.chainOfThought) ? vehicleForm.chainOfThought.join('\n') : (vehicleForm.chainOfThought || '')}
+                                        onChange={(e) => {
+                                            // Simply split by newlines and save as array
+                                            const lines = e.target.value.split('\n');
+                                            setVehicleForm(prev => ({ 
+                                                ...prev, 
+                                                chainOfThought: lines
+                                            }));
+                                        }}
                                         style={{ 
                                             minHeight: '80px',
                                             resize: 'vertical',
@@ -2086,19 +2209,54 @@
                                             padding: '8px'
                                         }}
                                     />
+                                    
+                                    {/* Add Reasoning Button */}
+                                    <button 
+                                        onClick={() => {
+                                            const currentLines = Array.isArray(vehicleForm.chainOfThought) ? vehicleForm.chainOfThought : [];
+                                            
+                                            // Add a new empty line for user to type
+                                            setVehicleForm(prev => ({ 
+                                                ...prev, 
+                                                chainOfThought: [...currentLines, ""]
+                                            }));
+                                            
+                                            // Focus the textarea after adding
+                                            setTimeout(() => {
+                                                const textarea = document.querySelector('textarea[placeholder*="Write your reasoning"]');
+                                                if (textarea) {
+                                                    textarea.focus();
+                                                    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+                                                }
+                                            }, 50);
+                                        }}
+                                        style={{
+                                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '6px',
+                                            padding: '6px 12px',
+                                            fontSize: '10px',
+                                            fontWeight: 'bold',
+                                            cursor: 'pointer',
+                                            marginTop: '6px',
+                                            width: '100%'
+                                        }}
+                                    >
+                                        ➕ Add Reasoning Line
+                                    </button>
+                                    
                                     <div style={{ 
                                         fontSize: '9px', 
                                         color: '#6b7280', 
                                         marginTop: '4px',
                                         fontStyle: 'italic' 
                                     }}>
-                                        💡 Example: "Heavy truck with visible cargo compartment and multiple axles..."
+                                        💡 Press Enter for new lines, each line saves separately to JSON.
                                     </div>
                                 </div>
                             </div>
-
-                            
-                            
+                                                        
 
                             {image && (
                                 <div style={{ marginBottom: '20px', padding: '12px', background: '#f0f9ff', borderRadius: '8px', border: '2px solid #0ea5e9' }}>
@@ -2271,7 +2429,7 @@
                                                         )}
                                                     </div>
                                                     <div className="annotation-info" style={{ color: '#6c757d' }}>
-                                                        {Math.round(obj.bbox.width)}×{Math.round(obj.bbox.height)}px
+                                                        {Math.round(obj.bbox[2] - obj.bbox[0])}×{Math.round(obj.bbox[3] - obj.bbox[1])}px
                                                         {obj.license_plate?.text && (
                                                             <span> • {obj.license_plate.text}</span>
                                                         )}
@@ -2476,10 +2634,10 @@
                                         const scaleY = imageRect.height / annotations.image.height;
                                         
                                         // Position relative to container
-                                        const left = (imageRect.left - containerRect.left) + (bbox.x * scaleX);
-                                        const top = (imageRect.top - containerRect.top) + (bbox.y * scaleY);
-                                        const width = bbox.width * scaleX;
-                                        const height = bbox.height * scaleY;
+                                        const left = (imageRect.left - containerRect.left) + (bbox[0] * scaleX);
+                                        const top = (imageRect.top - containerRect.top) + (bbox[1] * scaleY);
+                                        const width = (bbox[2] - bbox[0]) * scaleX;
+                                        const height = (bbox[3] - bbox[1]) * scaleY;
                                         
                                         const hasChildren = annotations.objects.some(child => child.parent_id === obj.id);
                                         const isSelected = selectedAnnotation === obj.id;
@@ -2496,7 +2654,8 @@
                                                     width: `${width}px`,
                                                     height: `${height}px`,
                                                     position: 'absolute',
-                                                    zIndex: isSelected ? 1000 : 100 - (bbox.width * bbox.height / 10000),
+                                                    zIndex: isSelected ? 1000 : 100 - ((bbox[2] - bbox[0]) * (bbox[3] - bbox[1]) / 10000),
+
                                                     cursor: 'move',
                                                     pointerEvents: 'auto'
                                                 }}
@@ -3687,10 +3846,10 @@
                                             const scaleX = imageRect.width / annotations.image.width;
                                             const scaleY = imageRect.height / annotations.image.height;
                                             
-                                            const left = (imageRect.left - containerRect.left) + (bbox.x * scaleX);
-                                            const top = (imageRect.top - containerRect.top) + (bbox.y * scaleY);
-                                            const width = bbox.width * scaleX;
-                                            const height = bbox.height * scaleY;
+                                            const left = (imageRect.left - containerRect.left) + (bbox[0] * scaleX);
+                                            const top = (imageRect.top - containerRect.top) + (bbox[1] * scaleY);
+                                            const width = (bbox[2] - bbox[0]) * scaleX;
+                                            const height = (bbox[3] - bbox[1]) * scaleY;
                                             
                                             const hasChildren = annotations.objects.some(child => child.parent_id === obj.id);
                                             const isSelected = selectedAnnotation === obj.id;
@@ -3707,7 +3866,8 @@
                                                         width: `${width}px`,
                                                         height: `${height}px`,
                                                         position: 'absolute',
-                                                        zIndex: isSelected ? 1000 : 100 - (bbox.width * bbox.height / 10000),
+                                                        zIndex: isSelected ? 1000 : 100 - ((bbox[2] - bbox[0]) * (bbox[3] - bbox[1]) / 10000),
+
                                                         cursor: 'move',
                                                         pointerEvents: 'auto'
                                                     }}
@@ -3899,7 +4059,8 @@
                                                             color: '#ccc',
                                                             fontSize: '10px'
                                                         }}>
-                                                            {Math.round(obj.bbox.width)}×{Math.round(obj.bbox.height)}px
+                                                            {Math.round(obj.bbox[2] - obj.bbox[0])}×{Math.round(obj.bbox[3] - obj.bbox[1])}px
+
                                                             {obj.license_plate?.text && (
                                                                 <span> • {obj.license_plate.text}</span>
                                                             )}
