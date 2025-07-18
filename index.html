@@ -482,7 +482,8 @@
                 // License plate
                 license_plate_text: '',
                 license_plate_country: 'MY',
-                license_plate_format: 'standard',
+                license_plate_format: 'License_Plate_Normal',
+
                 license_plate_blurred: false,
                 license_plate_visible: true,
                 chainOfThought: []               
@@ -620,7 +621,8 @@
                                 is_electric: false,
                                 license_plate_text: '',
                                 license_plate_country: 'MY',
-                                license_plate_format: 'standard',
+                                license_plate_format: 'License_Plate_Normal',
+
                                 license_plate_blurred: false,
                                 license_plate_visible: true
                             });
@@ -1422,6 +1424,7 @@
                     }
 
 
+
                     // Save with 'S' key
                     if (e.key === 's' || e.key === 'S') {
                         e.preventDefault();
@@ -1456,15 +1459,18 @@
                             return;
                         }
                         
-                        // Directory is selected - save immediately!
-                        console.log('✅ Directory selected, proceeding to save...');
+                        // Directory is selected - ALWAYS save if we have image and annotations!
+                        console.log('✅ Directory selected, checking for content to save...');
                         if (image && annotations.objects.length > 0) {
                             console.log('🚀 Calling saveCurrentImageToChosenLocation...');
                             saveCurrentImageToChosenLocation();
                             showTemporaryMessage('✅ Image and JSON saved successfully!');
+                        } else if (image && annotations.objects.length === 0) {
+                            console.log('⚠️ Image exists but no annotations');
+                            showTemporaryMessage('⚠️ No annotations to save! Draw some bounding boxes first.');
                         } else {
-                            console.log('❌ No image or annotations to save');
-                            showTemporaryMessage('❌ No image or annotations to save!');
+                            console.log('❌ No image loaded');
+                            showTemporaryMessage('❌ No image loaded!');
                         }
                     }
 
@@ -3252,11 +3258,13 @@
                                                         color: !vehicleForm.license_plate_visible ? '#999' : 'black'
                                                     }}
                                                 >
-                                                    <option value="standard">Standard</option>
-                                                    <option value="commercial">Commercial</option>
-                                                    <option value="government">Government</option>
-                                                    <option value="diplomatic">Diplomatic</option>
-                                                    <option value="temporary">Temporary</option>
+                                                    <option value="License_Plate_Normal">License Plate Normal</option>
+                                                    <option value="License_Plate_Taxi">License Plate Taxi</option>
+                                                    <option value="Trailer_Plate">Trailer Plate</option>
+                                                    <option value="Diplomatic_Plate">Diplomatic Plate</option>
+                                                    <option value="Thai_Plate">Thai Plate</option>
+                                                    <option value="EV_Plate">EV Plate</option>                                                
+
                                                 </select>
                                             </div>
                                         </div>                                        
@@ -3438,7 +3446,8 @@
                                                 is_electric: false,
                                                 license_plate_text: '',
                                                 license_plate_country: 'MY',
-                                                license_plate_format: 'standard',
+                                                license_plate_format: 'License_Plate_Normal',
+
                                                 license_plate_blurred: false,
                                                 license_plate_visible: true
                                             });
