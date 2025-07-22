@@ -921,7 +921,7 @@
                         const firstVehicle = jsonData.objects?.find(obj => obj.type === 'vehicle');
                         if (firstVehicle) {
                             setVehicleForm({
-                                category: firstVehicle.vehicle_info?.category || 'Light Vehicle',
+                                category: firstVehicle.vehicle_info?.category || 'Car',
                                 subcategory: firstVehicle.vehicle_info?.subcategory || '',
                                 country: firstVehicle.vehicle_info?.country || 'MY',
                                 brand: firstVehicle.vehicle_info?.brand || '',
@@ -943,18 +943,20 @@
                                 is_electric: firstVehicle.attributes?.is_electric || false,
                                 license_plate_text: firstVehicle.license_plate?.text || '',
                                 license_plate_country: firstVehicle.license_plate?.country || 'MY',
-                                license_plate_format: firstVehicle.license_plate?.format || 'standard',
+                                license_plate_format: firstVehicle.license_plate?.format || 'License_Plate_Normal',
                                 license_plate_blurred: firstVehicle.license_plate?.blurred || false,
-                                license_plate_visible: firstVehicle.license_plate?.visible || true
+                                license_plate_visible: firstVehicle.license_plate?.visible !== false,
+                                // ✅ FIX THIS LINE - ENSURE CoT LOADS PROPERLY:
+                                chainOfThought: Array.isArray(firstVehicle.CoT) ? firstVehicle.CoT : []
                             });
                         }
                         
-                        alert(`Successfully loaded ${jsonData.objects?.length || 0} annotations!`);
+                        alert(`Successfully loaded ${jsonData.objects?.length || 0} annotations! You can now modify bounding boxes, CoT, and all properties.`);
                     };
                     img.src = e.target.result;
                 };
                 reader.readAsDataURL(imageFile);
-            };  
+            };
             const handleDragOver = (e) => {
                 e.preventDefault();
                 setIsDragging(true);
@@ -1169,9 +1171,11 @@
                         wheels: [],
                         axles: [],
                         attachments: [],
+                        // ✅ ADD THIS LINE TO ENSURE CoT IS ALWAYS PRESENT:
                         CoT: Array.isArray(vehicleForm.chainOfThought) ? vehicleForm.chainOfThought.filter(line => line.trim() !== '') : []
                     };
                 }
+
                 if (annotationType === 'wheel') {
                     return {
                         ...baseAnnotation,
@@ -1218,7 +1222,8 @@
                                 view_pose: vehicleForm.view_pose,
                                 direction: vehicleForm.direction,
                                 vehicle_info: {
-                                    ...obj.vehicle_info,
+                                    // ✅ ENSURE THE OBJECT EXISTS FIRST:
+                                    ...(obj.vehicle_info || {}),
                                     category: vehicleForm.category,
                                     subcategory: vehicleForm.subcategory,
                                     brand: vehicleForm.brand,
@@ -1227,7 +1232,8 @@
                                     number_of_seats: vehicleForm.number_of_seats
                                 },
                                 mechanical: {
-                                    ...obj.mechanical,
+                                    // ✅ ENSURE THE OBJECT EXISTS FIRST:
+                                    ...(obj.mechanical || {}),
                                     number_of_wheels_visible: vehicleForm.number_of_wheels_visible,
                                     number_of_axles_inferred: vehicleForm.number_of_axles_inferred,
                                     number_of_axles_raised: vehicleForm.number_of_axles_raised,
@@ -1235,7 +1241,8 @@
                                     cargo_present: vehicleForm.cargo_present
                                 },
                                 attributes: {
-                                    ...obj.attributes,
+                                    // ✅ ENSURE THE OBJECT EXISTS FIRST:
+                                    ...(obj.attributes || {}),
                                     is_taxi: vehicleForm.is_taxi,
                                     is_bus: vehicleForm.is_bus,
                                     bus_type: vehicleForm.bus_type,
@@ -1249,7 +1256,8 @@
                                     blurred: vehicleForm.license_plate_blurred,
                                     visible: vehicleForm.license_plate_visible
                                 } : obj.license_plate,
-                                CoT: vehicleForm.chainOfThought ? [vehicleForm.chainOfThought] : obj.CoT
+                                // ✅ ENSURE CoT IS SAVED PROPERLY:
+                                CoT: Array.isArray(vehicleForm.chainOfThought) ? vehicleForm.chainOfThought.filter(line => line.trim() !== '') : []
                             };
                         }
                         return obj;
@@ -1258,7 +1266,6 @@
                 
                 alert('Vehicle annotation updated successfully! 🎉');
             };
-
 
             const deleteAnnotation = (id) => {
                 setAnnotations(prev => ({
@@ -1623,41 +1630,56 @@
                 // Create a new image to draw on canvas
                 const img = new Image();
                 img.onload = () => {
-                    // Draw the original image
+                    // Draw the original image first
                     ctx.drawImage(img, 0, 0);
                     
-                    // Draw all bounding boxes
-                    annotations.objects.forEach(obj => {
-                        const bbox = obj.bbox; // This is [x1, y1, x2, y2] format
+                    // FIXED: Sort annotations by area (largest first) to prevent small boxes being hidden
+                    const sortedAnnotations = [...annotations.objects].sort((a, b) => {
+                        const areaA = (a.bbox[2] - a.bbox[0]) * (a.bbox[3] - a.bbox[1]);
+                        const areaB = (b.bbox[2] - b.bbox[0]) * (b.bbox[3] - b.bbox[1]);
+                        return areaB - areaA; // Largest boxes drawn first
+                    });
+                    
+                    // Draw all bounding boxes with proper layering
+                    sortedAnnotations.forEach((obj, index) => {
+                        const bbox = obj.bbox; // [x1, y1, x2, y2] format
                         
-                        // Set bbox style based on type
+                        // FIXED: Better color system with reduced opacity to prevent hiding
                         const typeColors = {
-                            'vehicle': '#22c55e',
-                            'license_plate': '#3b82f6', 
-                            'wheel': '#f59e0b',
-                            'attachment': '#8b5cf6'
+                            'vehicle': { stroke: '#22c55e', fill: 'rgba(34, 197, 94, 0.08)' },
+                            'license_plate': { stroke: '#3b82f6', fill: 'rgba(59, 130, 246, 0.08)' },
+                            'wheel': { stroke: '#f59e0b', fill: 'rgba(245, 158, 11, 0.08)' },
+                            'attachment': { stroke: '#8b5cf6', fill: 'rgba(139, 92, 246, 0.08)' }
                         };
                         
-                        ctx.strokeStyle = typeColors[obj.type] || '#22c55e';
-                        ctx.lineWidth = 4;
-                        ctx.fillStyle = typeColors[obj.type] + '20'; // Semi-transparent fill
+                        const colors = typeColors[obj.type] || typeColors['vehicle'];
                         
-                        // Draw bbox rectangle - FIXED: Convert [x1,y1,x2,y2] to x,y,width,height
-                        const x = bbox[0];
-                        const y = bbox[1]; 
-                        const width = bbox[2] - bbox[0];  // x2 - x1
-                        const height = bbox[3] - bbox[1]; // y2 - y1
+                        // FIXED: Properly convert [x1,y1,x2,y2] to x,y,width,height
+                        const x = Math.round(bbox[0]);
+                        const y = Math.round(bbox[1]); 
+                        const width = Math.round(bbox[2] - bbox[0]);  // x2 - x1
+                        const height = Math.round(bbox[3] - bbox[1]); // y2 - y1
 
+                        // Skip invalid boxes
+                        if (width <= 0 || height <= 0) {
+                            console.warn(`Skipping invalid bbox for ${obj.type}:`, bbox);
+                            return;
+                        }
+
+                        // FIXED: Draw very light fill so boxes don't hide each other
+                        ctx.fillStyle = colors.fill;
                         ctx.fillRect(x, y, width, height);
+                        
+                        // FIXED: Draw thicker, more visible border
+                        ctx.strokeStyle = colors.stroke;
+                        ctx.lineWidth = Math.max(4, Math.min(10, Math.sqrt(width * height) / 25));
+                        ctx.setLineDash([]);
                         ctx.strokeRect(x, y, width, height);
                         
-                        // Draw label
-                        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-                        ctx.font = 'bold 20px Arial';
-                        
+                        // FIXED: Better label text
                         let labelText = obj.type.replace('_', ' ').toUpperCase();
-                        if (obj.type === 'vehicle') {
-                            labelText = `${labelText} (${obj.vehicle_info?.category || 'VEHICLE'})`;
+                        if (obj.type === 'vehicle' && obj.vehicle_info?.category) {
+                            labelText = obj.vehicle_info.category.toUpperCase();
                         }
                         if (obj.type === 'wheel' && obj.wheel_type) {
                             labelText = `WHEEL (${obj.wheel_type.toUpperCase()})`;
@@ -1666,22 +1688,70 @@
                             labelText += ` - ${obj.license_plate.text}`;
                         }
                         
-                        const textWidth = ctx.measureText(labelText).width;
+                        // FIXED: Larger, more visible font
+                        const fontSize = Math.max(18, Math.min(32, Math.min(width, height) / 5));
+                        ctx.font = `bold ${fontSize}px Arial`;
                         
-                        // Label background
-                        ctx.fillRect(x, y - 30, textWidth + 10, 30);
+                        const textMetrics = ctx.measureText(labelText);
+                        const textWidth = textMetrics.width;
+                        const textHeight = fontSize;
+                        
+                        // FIXED: Better label positioning that avoids edges
+                        let labelX = Math.max(4, Math.min(x, canvas.width - textWidth - 8));
+                        let labelY = y - textHeight - 10;
+                        
+                        // If label goes above image, put it inside the box
+                        if (labelY < textHeight + 5) {
+                            labelY = y + textHeight + 10;
+                        }
+                        
+                        // FIXED: Darker label background for better contrast
+                        const padding = 10;
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+                        ctx.fillRect(
+                            labelX - padding/2, 
+                            labelY - textHeight - padding/2, 
+                            textWidth + padding, 
+                            textHeight + padding
+                        );
 
-                        // Label text
+                        // FIXED: Thicker text outline for maximum visibility
+                        ctx.strokeStyle = 'black';
+                        ctx.lineWidth = 4;
+                        ctx.strokeText(labelText, labelX, labelY - 3);
                         ctx.fillStyle = 'white';
-                        ctx.fillText(labelText, x + 5, y - 8);
+                        ctx.fillText(labelText, labelX, labelY - 3);
+                        
+                        // FIXED: Better positioned index number
+                        if (sortedAnnotations.length > 1) {
+                            const indexText = `#${index + 1}`;
+                            const indexFontSize = Math.round(fontSize * 0.6);
+                            ctx.font = `bold ${indexFontSize}px Arial`;
+                            
+                            // Position in top-right corner
+                            const indexX = x + width - 35;
+                            const indexY = y + indexFontSize + 10;
+                            
+                            // Index background circle
+                            ctx.fillStyle = colors.stroke;
+                            ctx.beginPath();
+                            ctx.arc(indexX + 12, indexY - 5, 12, 0, 2 * Math.PI);
+                            ctx.fill();
+                            
+                            // Index text
+                            ctx.fillStyle = 'white';
+                            ctx.textAlign = 'center';
+                            ctx.fillText(indexText, indexX + 12, indexY);
+                            ctx.textAlign = 'left'; // Reset alignment
+                        }
                     });
-                    
-                    // Convert canvas to blob and download
+                                        
+                    // Save the canvas as image
                     canvas.toBlob((blob) => {
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
-                        a.download = `${annotations.image.filename.split('.')[0]}_annotated.${annotations.image.filename.split('.').pop()}`;
+                        a.download = `${annotations.image.filename.split('.')[0]}_annotated.png`;
                         a.click();
                         URL.revokeObjectURL(url);
                     }, 'image/png');
@@ -1689,6 +1759,8 @@
                 
                 img.src = imagePreview;
             };
+
+
 
             const exportAllProgress = () => {
                 // This could be expanded to save all annotated images' progress
@@ -1900,43 +1972,75 @@
                         ctx.drawImage(img, 0, 0);
                         
                         // Draw annotations - FIXED VERSION
-                        annotations.objects.forEach(obj => {
+                        // FIXED: Sort annotations by area (largest first)
+                        const sortedAnnotations = [...annotations.objects].sort((a, b) => {
+                            const areaA = (a.bbox[2] - a.bbox[0]) * (a.bbox[3] - a.bbox[1]);
+                            const areaB = (b.bbox[2] - b.bbox[0]) * (b.bbox[3] - b.bbox[1]);
+                            return areaB - areaA;
+                        });
+
+                        // Draw annotations with fixed rendering
+                        sortedAnnotations.forEach((obj, index) => {
                             const bbox = obj.bbox; // [x1, y1, x2, y2] format
+                            
+                            // FIXED: Better colors with reduced opacity
                             const typeColors = {
-                                'vehicle': '#22c55e',
-                                'license_plate': '#3b82f6', 
-                                'wheel': '#f59e0b',
-                                'attachment': '#8b5cf6'
+                                'vehicle': { stroke: '#22c55e', fill: 'rgba(34, 197, 94, 0.08)' },
+                                'license_plate': { stroke: '#3b82f6', fill: 'rgba(59, 130, 246, 0.08)' },
+                                'wheel': { stroke: '#f59e0b', fill: 'rgba(245, 158, 11, 0.08)' },
+                                'attachment': { stroke: '#8b5cf6', fill: 'rgba(139, 92, 246, 0.08)' }
                             };
                             
-                            ctx.strokeStyle = typeColors[obj.type] || '#22c55e';
-                            ctx.lineWidth = 4;
-                            ctx.fillStyle = typeColors[obj.type] + '20';
+                            const colors = typeColors[obj.type] || typeColors['vehicle'];
                             
-                            // FIXED: Convert [x1,y1,x2,y2] to x,y,width,height
-                            const x = bbox[0];
-                            const y = bbox[1];
-                            const width = bbox[2] - bbox[0];  // x2 - x1  
-                            const height = bbox[3] - bbox[1]; // y2 - y1
+                            // FIXED: Convert coordinates properly
+                            const x = Math.round(bbox[0]);
+                            const y = Math.round(bbox[1]);
+                            const width = Math.round(bbox[2] - bbox[0]);  
+                            const height = Math.round(bbox[3] - bbox[1]); 
                             
+                            if (width <= 0 || height <= 0) return;
+                            
+                            // FIXED: Very light fill so boxes don't hide each other
+                            ctx.fillStyle = colors.fill;
                             ctx.fillRect(x, y, width, height);
+                            
+                            // FIXED: Thicker, more visible stroke
+                            ctx.strokeStyle = colors.stroke;
+                            ctx.lineWidth = Math.max(5, Math.min(8, Math.sqrt(width * height) / 30));
+                            ctx.setLineDash([]);
                             ctx.strokeRect(x, y, width, height);
                             
-                            // Draw label
-                            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-                            ctx.font = 'bold 16px Arial';
-                            
+                            // FIXED: Better label text
                             let labelText = obj.type.replace('_', ' ').toUpperCase();
+                            if (obj.type === 'vehicle' && obj.vehicle_info?.category) {
+                                labelText = obj.vehicle_info.category.toUpperCase();
+                            }
                             if (obj.type === 'wheel' && obj.wheel_type) {
                                 labelText = `WHEEL (${obj.wheel_type.toUpperCase()})`;
                             }
                             
+                            // FIXED: Larger font
+                            const fontSize = Math.max(18, Math.min(24, Math.min(width, height) / 8));
+                            ctx.font = `bold ${fontSize}px Arial`;
                             const textWidth = ctx.measureText(labelText).width;
-                            ctx.fillRect(x, y - 25, textWidth + 10, 25);
+                            
+                            // FIXED: Better label positioning
+                            let labelY = y - fontSize - 8;
+                            if (labelY < fontSize + 5) labelY = y + fontSize + 8;
+                            
+                            // FIXED: Darker label background
+                            ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+                            ctx.fillRect(x, labelY - fontSize - 5, textWidth + 12, fontSize + 10);
+                            
+                            // FIXED: Text with outline
+                            ctx.strokeStyle = 'black';
+                            ctx.lineWidth = 3;
+                            ctx.strokeText(labelText, x + 6, labelY - 3);
                             ctx.fillStyle = 'white';
-                            ctx.fillText(labelText, x + 5, y - 8);
+                            ctx.fillText(labelText, x + 6, labelY - 3);
                         });
-                        
+                                                
                         canvas.toBlob(async (blob) => {
                             await saveToSelectedDirectory(blob, `${baseFilename}_annotated.png`, true);
                             console.log(`✅ Saved both JSON and image to ${saveDirectoryName}!`);
@@ -2395,7 +2499,7 @@
                                                     // Auto-load vehicle form when selecting a vehicle annotation
                                                     if (obj.type === 'vehicle') {
                                                         setVehicleForm({
-                                                            category: obj.vehicle_info?.category || 'Light Vehicle',
+                                                            category: obj.vehicle_info?.category || 'Car',
                                                             subcategory: obj.vehicle_info?.subcategory || '',
                                                             country: obj.vehicle_info?.country || 'MY',
                                                             brand: obj.vehicle_info?.brand || '',
@@ -2417,12 +2521,14 @@
                                                             is_electric: obj.attributes?.is_electric || false,
                                                             license_plate_text: obj.license_plate?.text || '',
                                                             license_plate_country: obj.license_plate?.country || 'MY',
-                                                            license_plate_format: obj.license_plate?.format || 'standard',
+                                                            license_plate_format: obj.license_plate?.format || 'License_Plate_Normal',
                                                             license_plate_blurred: obj.license_plate?.blurred || false,
-                                                            license_plate_visible: obj.license_plate?.visible !== false
+                                                            license_plate_visible: obj.license_plate?.visible !== false,
+                                                            // ✅ FIX THIS LINE TOO:
+                                                            chainOfThought: Array.isArray(obj.CoT) ? obj.CoT : []
                                                         });
                                                     }
-                                                }}                                                
+                                                }}                                            
                                             >
                                                 <div>  
                                                     <div className="annotation-type">
@@ -4109,7 +4215,6 @@
     </script>
 </body>
 </html>
-
 
 
 
