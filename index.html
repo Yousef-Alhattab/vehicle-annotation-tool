@@ -457,7 +457,8 @@
             
             // Current annotation form data
             const [vehicleForm, setVehicleForm] = React.useState({
-                category: 'car',
+                category: 'Car',
+
                 subcategory: '',
                 country: 'MY',
                 brand: '',
@@ -599,7 +600,7 @@
                             });
                             // Reset form to defaults
                             setVehicleForm({
-                                category: 'Light Vehicle',
+                                category: 'Car',
                                 subcategory: '',
                                 country: 'MY',
                                 brand: '',
@@ -1432,56 +1433,57 @@
 
 
 
-                    // Save with 'S' key
-                    if (e.key === 's' || e.key === 'S') {
+
+                    // Select save directory with 'S' key
+                    if ((e.key === 's' || e.key === 'S') && !e.ctrlKey) {
                         e.preventDefault();
                         
-                        console.log('🔍 S key pressed!');
-                        console.log('📁 selectedDirectory:', selectedDirectory);
-                        console.log('🖼️ image:', !!image);
-                        console.log('📋 annotations count:', annotations.objects.length);
-                        
-                        if (!selectedDirectory) {
-                            // First press - open directory picker directly
-                            console.log('⚠️ No directory selected, showing picker');
-                            if ('showDirectoryPicker' in window) {
-                                window.showDirectoryPicker()
-                                    .then(dirHandle => {
-                                        setSelectedDirectory(dirHandle);
-                                        setSaveDirectoryName(dirHandle.name);
-                                        
-                                        // Show success message under the image
-                                        showTemporaryMessage(`📁 Save location set to: ${dirHandle.name}\nPress 'S' again to save!`);
-                                        console.log('✅ Directory selected:', dirHandle.name);
-                                    })
-                                    .catch(error => {
-                                        if (error.name !== 'AbortError') {
-                                            console.error('Error selecting directory:', error);
-                                            showTemporaryMessage('⚠️ Directory picker not supported. Use the Select Save Directory button.');
-                                        }
-                                    });
-                            } else {
-                                showTemporaryMessage('⚠️ Directory picker not supported. Please use the "📁 Select Save Directory" button!');
-                            }
-                            return;
-                        }
-                        
-                        // Directory is selected - ALWAYS save if we have image and annotations!
-                        console.log('✅ Directory selected, checking for content to save...');
-                        if (image && annotations.objects.length > 0) {
-                            console.log('🚀 Calling saveCurrentImageToChosenLocation...');
-                            saveCurrentImageToChosenLocation();
-                            showTemporaryMessage('✅ Image and JSON saved successfully!');
-                        } else if (image && annotations.objects.length === 0) {
-                            console.log('⚠️ Image exists but no annotations');
-                            showTemporaryMessage('⚠️ No annotations to save! Draw some bounding boxes first.');
+                        if ('showDirectoryPicker' in window) {
+                            window.showDirectoryPicker()
+                                .then(dirHandle => {
+                                    // Force state update with callback to ensure it's set
+                                    setSelectedDirectory(dirHandle);
+                                    setSaveDirectoryName(dirHandle.name);
+                                    
+                                    // Force a re-render to ensure state is updated
+                                    setTimeout(() => {
+                                        console.log('✅ Directory set:', dirHandle.name);
+                                        showTemporaryMessage(`📁 Save location set to: ${dirHandle.name}\nPress 'Ctrl+S' to save images!`);
+                                    }, 100);
+                                })
+                                .catch(error => {
+                                    if (error.name !== 'AbortError') {
+                                        showTemporaryMessage('⚠️ Directory picker not supported.');
+                                    }
+                                });
                         } else {
-                            console.log('❌ No image loaded');
-                            showTemporaryMessage('❌ No image loaded!');
+                            showTemporaryMessage('⚠️ Directory picker not supported. Use the button instead!');
                         }
                     }
 
 
+                    // Save current image with 'Ctrl+S' key  
+                    if (e.ctrlKey && (e.key === 's' || e.key === 'S') && !e.shiftKey) {
+                        e.preventDefault();
+                        
+                        console.log('🔍 Ctrl+S pressed! selectedDirectory:', selectedDirectory);
+                        
+                        if (!selectedDirectory) {
+                            console.log('❌ No directory selected');
+                            showTemporaryMessage('⚠️ Please select directory first! Press "S" to choose.');
+                            return;
+                        }
+                        
+                        console.log('✅ Directory found, proceeding to save');
+                        if (image && annotations.objects.length > 0) {
+                            saveCurrentImageToChosenLocation();
+                            showTemporaryMessage('✅ Image and JSON saved successfully!');
+                        } else if (image && annotations.objects.length === 0) {
+                            showTemporaryMessage('⚠️ No annotations to save!');
+                        } else {
+                            showTemporaryMessage('❌ No image loaded!');
+                        }
+                    }
                     // Save all annotated images with 'Ctrl+Shift+S' key
                     if (e.ctrlKey && e.shiftKey && (e.key === 's' || e.key === 'S')) {
                         e.preventDefault();
@@ -1540,7 +1542,7 @@
 
                 document.addEventListener('keydown', handleKeyDown);
                 return () => document.removeEventListener('keydown', handleKeyDown);
-            }, [selectedAnnotation, annotations, isDrawing, undoHistory, redoHistory, isFullscreen, imageDirectory, currentImageIndex]);
+            }, [selectedAnnotation, annotations, isDrawing, undoHistory, redoHistory, isFullscreen, imageDirectory, currentImageIndex, selectedDirectory, image]);
 
                         
 
@@ -2257,15 +2259,7 @@
                                         </label>
                                     </div>
                                 </div>
-                                
-                                {/* Example Button - Compact */}
-                                <button 
-                                    onClick={loadExampleImage}
-                                    className="btn-primary" 
-                                    style={{ width: '100%', padding: '8px 12px', fontSize: '11px', marginBottom: '12px' }}
-                                >
-                                    ⚡ Example Vehicle
-                                </button>
+
                             </div>
 
                             {/* Chain of Thought (CoT) Section - Now in Left Panel */}
@@ -2312,7 +2306,7 @@
                                             }));
                                         }}
                                         style={{ 
-                                            minHeight: '80px',
+                                            minHeight: '120px',
                                             resize: 'vertical',
                                             fontSize: '11px',
                                             fontFamily: 'inherit',
@@ -2366,7 +2360,15 @@
                                     </div>
                                 </div>
                             </div>
-                                                        
+
+                            {/* Example Button - Compact */}
+                            <button 
+                                onClick={loadExampleImage}
+                                className="btn-primary" 
+                                style={{ width: '100%', padding: '8px 12px', fontSize: '11px', marginBottom: '12px' }}
+                            >
+                                ⚡ Example Vehicle
+                            </button>                                                        
 
                             {image && (
                                 <div style={{ marginBottom: '20px', padding: '12px', background: '#f0f9ff', borderRadius: '8px', border: '2px solid #0ea5e9' }}>
@@ -3830,7 +3832,8 @@
                                         <div style={{ marginBottom: '4px' }}><strong>Ctrl+Y:</strong> Redo action</div>
                                         <div style={{ marginBottom: '4px' }}><strong>Delete/Backspace:</strong> Remove selected annotation</div>
                                         <div style={{ marginBottom: '4px' }}><strong>1,2,3,4,5:</strong> Change selected annotation type</div>
-                                        <div style={{ marginBottom: '4px' }}><strong>S:</strong> Save JSON + Annotated Image</div>
+                                        <div style={{ marginBottom: '4px' }}><strong>S:</strong> Select save directory</div>
+                                        <div style={{ marginBottom: '4px' }}><strong>Ctrl+S:</strong> Save JSON + Annotated Image</div>
                                         <div style={{ marginBottom: '4px' }}><strong>W:</strong> Toggle drawing mode</div>
                                         <div style={{ marginBottom: '4px' }}><strong>F:</strong> Enter fullscreen mode</div>
                                         <div><strong>Escape:</strong> Exit fullscreen, cancel drawing, or deselect</div>
